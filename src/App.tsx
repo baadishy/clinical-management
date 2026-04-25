@@ -220,6 +220,11 @@ export default function App() {
 
       const totalGrossRevenue = patients.reduce((acc, p) => acc + p.price, 0);
 
+      const managementTotal = patients.reduce((acc, p) => {
+        const mPrice = settings.managementPrices[p.clinic][p.service] || 0;
+        return acc + mPrice;
+      }, 0);
+
       const record: DailyRecord = {
         id: crypto.randomUUID(),
         date: today,
@@ -232,7 +237,8 @@ export default function App() {
         allPatients: [...patients],
         totalGrossRevenue,
         tithe,
-        totalNetRevenue: totalGrossRevenue - tithe,
+        management: managementTotal,
+        totalNetRevenue: totalGrossRevenue - tithe - managementTotal,
         isLocked: true
       };
 
@@ -653,9 +659,25 @@ export default function App() {
                 />
               </div>
 
-              <div className="bg-[#4f46e5]/5 p-6 rounded-2xl border border-[#4f46e5]/10 flex justify-between items-center ring-4 ring-[#4f46e5]/5">
-                <p className="font-black text-slate-900">الصافي النهائي:</p>
-                <p className="text-3xl font-black text-indigo-600">{dailyStats.totalRevenue - tithe} ج.م</p>
+              <div className="bg-[#4f46e5]/5 p-6 rounded-2xl border border-[#4f46e5]/10 flex flex-col gap-2 ring-4 ring-[#4f46e5]/5">
+                <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                  <p>إجمالي الإيرادات:</p>
+                  <p>{dailyStats.totalRevenue} ج.م</p>
+                </div>
+                <div className="flex justify-between items-center text-sm font-bold text-orange-600">
+                  <p>العشور:</p>
+                  <p>-{tithe} ج.م</p>
+                </div>
+                <div className="flex justify-between items-center text-sm font-bold text-purple-600">
+                  <p>العاملة:</p>
+                  <p>-{patients.reduce((acc, p) => acc + (settings.managementPrices[p.clinic][p.service] || 0), 0)} ج.م</p>
+                </div>
+                <div className="border-t border-slate-200 mt-2 pt-2 flex justify-between items-center">
+                  <p className="font-black text-slate-900">الصافي النهائي:</p>
+                  <p className="text-3xl font-black text-indigo-600">
+                    {dailyStats.totalRevenue - tithe - patients.reduce((acc, p) => acc + (settings.managementPrices[p.clinic][p.service] || 0), 0)} ج.م
+                  </p>
+                </div>
               </div>
 
               <div className="flex gap-4 pt-2">
@@ -805,11 +827,15 @@ function SettingsView({
   showToast: (message: string, type?: 'success' | 'error') => void;
 }) {
   const [localPrices, setLocalPrices] = useState(settings.prices);
+  const [localManagementPrices, setLocalManagementPrices] = useState(settings.managementPrices);
   const [activeClinic, setActiveClinic] = useState<ClinicType>('MINIA');
 
   const save = () => {
-    const updated = { prices: localPrices };
-    confirmAction('هل أنت متأكد من حفظ التغييرات في أسعار الخدمات لكلا العيادتين؟', () => {
+    const updated = { 
+      prices: localPrices,
+      managementPrices: localManagementPrices
+    };
+    confirmAction('هل أنت متأكد من حفظ التغييرات في الأسعار لكلا العيادتين؟', () => {
       onSave(updated);
       saveSettings(updated);
       showToast('تم حفظ لوائح الأسعار بنجاح');
@@ -852,28 +878,59 @@ function SettingsView({
         </div>
         <div className="p-8 space-y-6">
           {Object.entries(SERVICES).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-6 group">
-              <label className="flex-1 font-black text-sm text-slate-600">{label}</label>
-              <input 
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={localPrices[activeClinic][key as ServiceType] === 0 ? '' : localPrices[activeClinic][key as ServiceType]}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '');
-                  const numVal = val === '' ? 0 : Number(val);
-                  setLocalPrices({
-                    ...localPrices,
-                    [activeClinic]: {
-                      ...localPrices[activeClinic],
-                      [key]: numVal
-                    }
-                  });
-                }}
-                onFocus={(e) => e.target.select()}
-                className="w-40 p-4 bg-slate-50 border-2 border-transparent group-hover:border-slate-100 focus:bg-white focus:border-indigo-600 focus:outline-none rounded-2xl text-center font-black transition-all text-xl"
-                placeholder="0"
-              />
+            <div key={key} className="space-y-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group">
+              <div className="flex items-center justify-between">
+                <label className="font-black text-sm text-slate-600">{label}</label>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{CLINICS[activeClinic].initial}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">سعر الخدمة</p>
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={localPrices[activeClinic][key as ServiceType] === 0 ? '' : localPrices[activeClinic][key as ServiceType]}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      const numVal = val === '' ? 0 : Number(val);
+                      setLocalPrices({
+                        ...localPrices,
+                        [activeClinic]: {
+                          ...localPrices[activeClinic],
+                          [key]: numVal
+                        }
+                      });
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full p-4 bg-white border-2 border-transparent group-hover:border-slate-100 focus:border-indigo-600 focus:outline-none rounded-2xl text-center font-black transition-all text-lg"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-indigo-400 uppercase text-right">العاملة</p>
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={localManagementPrices[activeClinic][key as ServiceType] === 0 ? '' : localManagementPrices[activeClinic][key as ServiceType]}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      const numVal = val === '' ? 0 : Number(val);
+                      setLocalManagementPrices({
+                        ...localManagementPrices,
+                        [activeClinic]: {
+                          ...localManagementPrices[activeClinic],
+                          [key]: numVal
+                        }
+                      });
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full p-4 bg-white border-2 border-transparent group-hover:border-indigo-100 focus:border-purple-600 focus:outline-none rounded-2xl text-center font-black transition-all text-lg"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -1021,9 +1078,10 @@ function HistoryView({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
                       <SummaryItem label="إجمالي الدخل" value={`${selectedRecord.totalGrossRevenue} ج.م`} color="slate" />
-                      <SummaryItem label="قيمة العشور" value={`${selectedRecord.tithe} ج.م`} color="red" />
+                      <SummaryItem label="العشور" value={`${selectedRecord.tithe} ج.م`} color="red" />
+                      <SummaryItem label="العاملة" value={`${selectedRecord.management || 0} ج.م`} color="purple" />
                       <SummaryItem label="الصافي النهائي" value={`${selectedRecord.totalNetRevenue} ج.م`} color="green" />
                       <SummaryItem label="عدد المريضات" value={selectedRecord.totalPatients.toString()} color="blue" />
                     </div>
@@ -1285,18 +1343,22 @@ function PostDaySummary({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mt-12">
           <div className="bg-slate-50 p-8 rounded-[2rem] text-center border-b-4 border-indigo-500">
             <p className="text-slate-500 font-black text-sm mb-2 uppercase tracking-widest">إجمالي الإيرادات</p>
-            <h3 className="text-4xl font-black text-slate-900">{record.totalGrossRevenue} <span className="text-xl text-slate-400">ج.م</span></h3>
+            <h3 className="text-3xl font-black text-slate-900">{record.totalGrossRevenue} <span className="text-lg text-slate-400">ج.م</span></h3>
+          </div>
+          <div className="bg-slate-50 p-8 rounded-[2rem] text-center border-b-4 border-orange-500">
+            <p className="text-slate-500 font-black text-sm mb-2 uppercase tracking-widest">العشور</p>
+            <h3 className="text-3xl font-black text-orange-600">{record.tithe} <span className="text-lg text-orange-400">ج.م</span></h3>
+          </div>
+          <div className="bg-slate-50 p-8 rounded-[2rem] text-center border-b-4 border-purple-500">
+            <p className="text-slate-500 font-black text-sm mb-2 uppercase tracking-widest">العاملة</p>
+            <h3 className="text-3xl font-black text-purple-600">{record.management || 0} <span className="text-lg text-purple-400">ج.م</span></h3>
           </div>
           <div className="bg-slate-50 p-8 rounded-[2rem] text-center border-b-4 border-emerald-500">
             <p className="text-slate-500 font-black text-sm mb-2 uppercase tracking-widest">الصافي النهائي</p>
-            <h3 className="text-4xl font-black text-emerald-600">{record.totalNetRevenue} <span className="text-xl text-emerald-400">ج.م</span></h3>
-          </div>
-          <div className="bg-slate-50 p-8 rounded-[2rem] text-center border-b-4 border-blue-500">
-            <p className="text-slate-500 font-black text-sm mb-2 uppercase tracking-widest">إجمالي الحالات</p>
-            <h3 className="text-4xl font-black text-blue-600">{record.totalPatients} <span className="text-xl text-blue-400">مريضة</span></h3>
+            <h3 className="text-3xl font-black text-emerald-600">{record.totalNetRevenue} <span className="text-lg text-emerald-400">ج.م</span></h3>
           </div>
         </div>
       </div>
@@ -1390,6 +1452,7 @@ function SummaryItem({ label, value, color }: { label: string; value: string; co
     green: 'bg-emerald-50 text-emerald-700 border-emerald-100 ring-4 ring-emerald-500/5',
     blue: 'bg-indigo-50 text-indigo-700 border-indigo-100 ring-4 ring-indigo-500/5',
     red: 'bg-orange-50 text-orange-700 border-orange-100 ring-4 ring-orange-500/5',
+    purple: 'bg-purple-50 text-purple-700 border-purple-100 ring-4 ring-purple-500/5',
     slate: 'bg-slate-50 text-slate-700 border-slate-100 ring-4 ring-slate-500/5'
   };
   return (

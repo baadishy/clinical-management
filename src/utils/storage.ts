@@ -4,13 +4,19 @@
  */
 
 import { AppSettings, DailyRecord, PatientRecord } from '../types';
-import { STORAGE_KEYS, DEFAULT_PRICES } from '../constants';
+import { STORAGE_KEYS, DEFAULT_PRICES, DEFAULT_MANAGEMENT_PRICES } from '../constants';
 
 export const getSettings = (): AppSettings => {
   const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
+      
+      // Ensure managementPrices exists
+      if (!parsed.managementPrices) {
+        parsed.managementPrices = { ...DEFAULT_MANAGEMENT_PRICES };
+      }
+
       // Migration: if prices is flat (legacy), move to both clinics
       const firstPrice = Object.values(parsed.prices || {})[0];
       if (typeof firstPrice === 'number') {
@@ -18,7 +24,8 @@ export const getSettings = (): AppSettings => {
           prices: {
             MINIA: { ...parsed.prices },
             BENI_AHMED: { ...parsed.prices }
-          }
+          },
+          managementPrices: { ...DEFAULT_MANAGEMENT_PRICES }
         };
       }
       return parsed;
@@ -26,7 +33,10 @@ export const getSettings = (): AppSettings => {
       console.error('Error parsing settings', e);
     }
   }
-  return { prices: { ...DEFAULT_PRICES } };
+  return { 
+    prices: { ...DEFAULT_PRICES },
+    managementPrices: { ...DEFAULT_MANAGEMENT_PRICES }
+  };
 };
 
 export const saveSettings = (settings: AppSettings) => {

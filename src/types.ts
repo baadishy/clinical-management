@@ -39,10 +39,12 @@ export interface DailyRecord {
   allPatients?: PatientRecord[]; // Optional: full patient list for history
   totalGrossRevenue: number;
   tithe: number;
+  management: number;
   totalNetRevenue: number;
   isLocked: boolean; // Once day is "ended" and saved to history
 }
 
 export interface AppSettings {
   prices: Record<ClinicType, Record<ServiceType, number>>;
+  managementPrices: Record<ClinicType, Record<ServiceType, number>>;
 }

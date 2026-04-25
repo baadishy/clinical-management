@@ -48,6 +48,25 @@ export const DEFAULT_PRICES: Record<ClinicType, Record<ServiceType, number>> = {
   },
 };
 
+export const DEFAULT_MANAGEMENT_PRICES: Record<ClinicType, Record<ServiceType, number>> = {
+  MINIA: {
+    CHECKUP: 20,
+    FOLLOWUP: 10,
+    IUD_INSERTION: 50,
+    IUD_REMOVAL: 30,
+    CAPSULE_REMOVAL: 40,
+    PREGNANCY_TEST: 15,
+  },
+  BENI_AHMED: {
+    CHECKUP: 20,
+    FOLLOWUP: 10,
+    IUD_INSERTION: 50,
+    IUD_REMOVAL: 30,
+    CAPSULE_REMOVAL: 40,
+    PREGNANCY_TEST: 15,
+  },
+};
+
 export const STORAGE_KEYS = {
   SETTINGS: 'clinic_app_settings',
   HISTORY: 'clinic_app_history',
