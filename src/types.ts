@@ -44,5 +44,5 @@ export interface DailyRecord {
 }
 
 export interface AppSettings {
-  prices: Record<ServiceType, number>;
+  prices: Record<ClinicType, Record<ServiceType, number>>;
 }

@@ -29,13 +29,23 @@ export const SERVICES: Record<ServiceType, string> = {
   PREGNANCY_TEST: 'اختبار حمل',
 };
 
-export const DEFAULT_PRICES: Record<ServiceType, number> = {
-  CHECKUP: 200,
-  FOLLOWUP: 100,
-  IUD_INSERTION: 500,
-  IUD_REMOVAL: 300,
-  CAPSULE_REMOVAL: 400,
-  PREGNANCY_TEST: 150,
+export const DEFAULT_PRICES: Record<ClinicType, Record<ServiceType, number>> = {
+  MINIA: {
+    CHECKUP: 200,
+    FOLLOWUP: 100,
+    IUD_INSERTION: 500,
+    IUD_REMOVAL: 300,
+    CAPSULE_REMOVAL: 400,
+    PREGNANCY_TEST: 150,
+  },
+  BENI_AHMED: {
+    CHECKUP: 200,
+    FOLLOWUP: 100,
+    IUD_INSERTION: 500,
+    IUD_REMOVAL: 300,
+    CAPSULE_REMOVAL: 400,
+    PREGNANCY_TEST: 150,
+  },
 };
 
 export const STORAGE_KEYS = {

@@ -73,6 +73,14 @@ export default function App() {
   const [selectedClinic, setSelectedClinic] = useState<ClinicType>('MINIA');
   const [showEndDayModal, setShowEndDayModal] = useState(false);
   const [tithe, setTithe] = useState<number>(0);
+  const [serviceCounts, setServiceCounts] = useState<Record<ServiceType, number>>({
+    CHECKUP: 0,
+    FOLLOWUP: 0,
+    IUD_INSERTION: 0,
+    IUD_REMOVAL: 0,
+    CAPSULE_REMOVAL: 0,
+    PREGNANCY_TEST: 0,
+  });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -130,10 +138,45 @@ export default function App() {
         timestamp: Date.now(),
         clinic: selectedClinic,
         service,
-        price: settings.prices[service],
+        price: settings.prices[selectedClinic][service],
       };
       setPatients([...patients, newPatient]);
       showToast('تم إضافة المريضة بنجاح');
+    });
+  };
+
+  const addBatchPatients = () => {
+    const newPatients: PatientRecord[] = [];
+    Object.entries(serviceCounts).forEach(([service, count]) => {
+      if (count > 0) {
+        for (let i = 0; i < count; i++) {
+          newPatients.push({
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            clinic: selectedClinic,
+            service: service as ServiceType,
+            price: settings.prices[selectedClinic][service as ServiceType],
+          });
+        }
+      }
+    });
+
+    if (newPatients.length === 0) {
+      showToast('يرجى تحديد عدد المريضات أولاً', 'error');
+      return;
+    }
+
+    confirmAction(`هل أنت متأكد من إضافة ${newPatients.length} مريضة للعيادة؟`, () => {
+      setPatients([...patients, ...newPatients]);
+      setServiceCounts({
+        CHECKUP: 0,
+        FOLLOWUP: 0,
+        IUD_INSERTION: 0,
+        IUD_REMOVAL: 0,
+        CAPSULE_REMOVAL: 0,
+        PREGNANCY_TEST: 0,
+      });
+      showToast(`تم إضافة ${newPatients.length} مريضة بنجاح`);
     });
   };
 
@@ -374,19 +417,77 @@ export default function App() {
 
                     {/* Service Selection */}
                     <div>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">اختر الخدمة المطلوبة</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {Object.entries(SERVICES).map(([key, label]) => (
-                          <button
-                            key={key}
-                            onClick={() => addPatient(key as ServiceType)}
-                            className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-center hover:border-indigo-500 hover:bg-white transition-all group shadow-sm active:scale-[0.96]"
+                      <div className="flex justify-between items-center mb-6">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">أدخل عدد المريضات لكل خدمة</p>
+                        {Object.values(serviceCounts).some(c => c > 0) && (
+                          <button 
+                            onClick={() => setServiceCounts({
+                              CHECKUP: 0, FOLLOWUP: 0, IUD_INSERTION: 0, IUD_REMOVAL: 0, CAPSULE_REMOVAL: 0, PREGNANCY_TEST: 0
+                            })}
+                            className="text-[10px] font-black text-red-500 hover:underline"
                           >
-                            <p className="text-xs font-black text-slate-700 group-hover:text-indigo-600">{label}</p>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-widest">{settings.prices[key as ServiceType]} EGP</p>
+                            تصفير الكل
                           </button>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {Object.entries(SERVICES).map(([key, label]) => (
+                          <div
+                            key={key}
+                            className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-4 ${
+                              serviceCounts[key as ServiceType] > 0 
+                                ? 'bg-indigo-50 border-indigo-200' 
+                                : 'bg-slate-50 border-slate-100'
+                            }`}
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-black text-slate-700">{label}</p>
+                              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{settings.prices[selectedClinic][key as ServiceType]} EGP</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => setServiceCounts(prev => ({...prev, [key]: Math.max(0, Number(prev[key as ServiceType]) - 1)}))}
+                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-600 transition-all font-black"
+                              >
+                                -
+                              </button>
+                              <input 
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={serviceCounts[key as ServiceType] === 0 ? '' : serviceCounts[key as ServiceType]}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, '');
+                                  setServiceCounts(prev => ({...prev, [key]: val === '' ? 0 : parseInt(val)}));
+                                }}
+                                onFocus={(e) => e.target.select()}
+                                className="w-12 bg-transparent text-center font-black text-lg focus:outline-none"
+                                placeholder="0"
+                              />
+                              <button 
+                                onClick={() => setServiceCounts(prev => ({...prev, [key]: Number(prev[key as ServiceType]) + 1}))}
+                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-600 transition-all font-black"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
                         ))}
                       </div>
+
+                      <button 
+                        onClick={addBatchPatients}
+                        disabled={!Object.values(serviceCounts).some(c => c > 0)}
+                        className="w-full mt-8 py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:shadow-none flex items-center justify-center gap-3"
+                      >
+                        <PlusCircle size={24} />
+                        إضافة المريضات المحددة
+                      </button>
+                      <p className="text-center text-[10px] text-slate-400 font-bold mt-4">
+                        سيتم إضافة المريضات لـ <span className="text-indigo-600 underline">{CLINICS[selectedClinic].label}</span> بناءً على الأعداد المدخلة أعلاه
+                      </p>
                     </div>
                   </div>
                 </section>
@@ -704,13 +805,14 @@ function SettingsView({
   showToast: (message: string, type?: 'success' | 'error') => void;
 }) {
   const [localPrices, setLocalPrices] = useState(settings.prices);
+  const [activeClinic, setActiveClinic] = useState<ClinicType>('MINIA');
 
   const save = () => {
     const updated = { prices: localPrices };
-    confirmAction('هل أنت متأكد من حفظ التغييرات في أسعار الخدمات؟', () => {
+    confirmAction('هل أنت متأكد من حفظ التغييرات في أسعار الخدمات لكلا العيادتين؟', () => {
       onSave(updated);
       saveSettings(updated);
-      showToast('تم حفظ لائحة الأسعار بنجاح');
+      showToast('تم حفظ لوائح الأسعار بنجاح');
     });
   };
 
@@ -722,25 +824,52 @@ function SettingsView({
     >
       <div className="space-y-2 border-r-4 border-indigo-600 pr-4">
         <h2 className="text-2xl font-black text-slate-900">إعدادات العيادة</h2>
-        <p className="text-slate-500 font-medium">تحكمي في أسعار جميع الخدمات الست المتوفرة في نظامك</p>
+        <p className="text-slate-500 font-medium">تحكمي في أسعار الخدمات لكل عيادة بشكل مستقل</p>
+      </div>
+
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+        {Object.entries(CLINICS).map(([key, config]) => (
+          <button 
+            key={key}
+            onClick={() => setActiveClinic(key as ClinicType)}
+            className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeClinic === key ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+          >
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px]" style={{ backgroundColor: `${config.color}15`, color: config.color }}>
+              {config.initial}
+            </div>
+            {config.label}
+          </button>
+        ))}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-        <div className="p-8 bg-slate-50 border-b border-slate-200">
+        <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
            <h3 className="font-black flex items-center gap-3 text-slate-700">
             <SettingsIcon size={22} className="text-indigo-600" />
-            لائحة أسعار الخدمات (ج.م)
+            أسعار {CLINICS[activeClinic].label} (ج.م)
            </h3>
+           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{CLINICS[activeClinic].subLabel}</span>
         </div>
         <div className="p-8 space-y-6">
           {Object.entries(SERVICES).map(([key, label]) => (
             <div key={key} className="flex items-center gap-6 group">
               <label className="flex-1 font-black text-sm text-slate-600">{label}</label>
               <input 
-                type="number"
-                value={localPrices[key as ServiceType] || ''}
-                onChange={(e) => setLocalPrices({ ...localPrices, [key]: e.target.value === '' ? 0 : Number(e.target.value) })}
-                onWheel={(e) => e.target instanceof HTMLInputElement && e.target.blur()}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={localPrices[activeClinic][key as ServiceType] === 0 ? '' : localPrices[activeClinic][key as ServiceType]}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  const numVal = val === '' ? 0 : Number(val);
+                  setLocalPrices({
+                    ...localPrices,
+                    [activeClinic]: {
+                      ...localPrices[activeClinic],
+                      [key]: numVal
+                    }
+                  });
+                }}
                 onFocus={(e) => e.target.select()}
                 className="w-40 p-4 bg-slate-50 border-2 border-transparent group-hover:border-slate-100 focus:bg-white focus:border-indigo-600 focus:outline-none rounded-2xl text-center font-black transition-all text-xl"
                 placeholder="0"
@@ -753,7 +882,7 @@ function SettingsView({
             onClick={save}
             className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 active:scale-[0.98]"
           >
-            حفظ لائحة الأسعار
+            حفظ جميع التغييرات
           </button>
         </div>
       </div>

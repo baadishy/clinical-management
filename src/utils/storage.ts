@@ -10,7 +10,18 @@ export const getSettings = (): AppSettings => {
   const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Migration: if prices is flat (legacy), move to both clinics
+      const firstPrice = Object.values(parsed.prices || {})[0];
+      if (typeof firstPrice === 'number') {
+        return {
+          prices: {
+            MINIA: { ...parsed.prices },
+            BENI_AHMED: { ...parsed.prices }
+          }
+        };
+      }
+      return parsed;
     } catch (e) {
       console.error('Error parsing settings', e);
     }
