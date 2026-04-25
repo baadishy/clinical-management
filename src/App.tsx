@@ -122,7 +122,21 @@ export default function App() {
 
   // Load initial data
   useEffect(() => {
-    setPatients(getCurrentDayPatients());
+    const savedPatients = getCurrentDayPatients();
+    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local format
+    
+    // Auto-clear if there are patients from a previous day that weren't cleared
+    if (savedPatients.length > 0) {
+      const lastPatientDate = new Date(savedPatients[0].timestamp).toLocaleDateString('en-CA');
+      if (lastPatientDate !== today) {
+        confirmAction(`هناك بيانات متبقية من يوم ${lastPatientDate}. هل تريد مسحها والبدء في يوم جديد؟`, () => {
+          clearCurrentDayPatients();
+          setPatients([]);
+        });
+      } else {
+        setPatients(savedPatients);
+      }
+    }
     setHistory(getHistory());
   }, []);
 
@@ -197,7 +211,8 @@ export default function App() {
 
   const handleEndDay = () => {
     confirmAction('هل أنت متأكد من إنهاء اليوم؟ سيتم ترحيل جميع البيانات إلى السجل التاريخي وتصفير قائمة اليوم.', () => {
-      const today = new Date().toISOString().split('T')[0];
+      // Use local date for the record
+      const today = new Date().toLocaleDateString('en-CA'); // Gets YYYY-MM-DD in local time
       
       const patientsByService: Record<ServiceType, number> = {} as any;
       const revenueByService: Record<ServiceType, number> = {} as any;
