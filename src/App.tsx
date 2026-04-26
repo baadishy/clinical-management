@@ -218,6 +218,7 @@ export default function App() {
       const revenueByService: Record<ServiceType, number> = {} as any;
       const patientsByClinic: Record<ClinicType, number> = {} as any;
       const revenueByClinic: Record<ClinicType, number> = {} as any;
+      const managementByClinic: Record<ClinicType, number> = {} as any;
       
       Object.keys(SERVICES).forEach((key) => {
         const s = key as ServiceType;
@@ -231,14 +232,15 @@ export default function App() {
         const clinicPatients = patients.filter(p => p.clinic === c);
         patientsByClinic[c] = clinicPatients.length;
         revenueByClinic[c] = clinicPatients.reduce((acc, p) => acc + p.price, 0);
+        managementByClinic[c] = clinicPatients.reduce((acc, p) => {
+          const mPrice = settings.managementPrices[p.clinic][p.service] || 0;
+          return acc + mPrice;
+        }, 0);
       });
 
       const totalGrossRevenue = patients.reduce((acc, p) => acc + p.price, 0);
 
-      const managementTotal = patients.reduce((acc, p) => {
-        const mPrice = settings.managementPrices[p.clinic][p.service] || 0;
-        return acc + mPrice;
-      }, 0);
+      const managementTotal = Object.values(managementByClinic).reduce((acc, val) => acc + val, 0);
 
       const record: DailyRecord = {
         id: crypto.randomUUID(),
@@ -249,6 +251,7 @@ export default function App() {
         revenueByService,
         patientsByClinic,
         revenueByClinic,
+        managementByClinic,
         allPatients: [...patients],
         totalGrossRevenue,
         tithe,
@@ -367,14 +370,21 @@ export default function App() {
                 <StatCard 
                   label="إجمالي إيرادات اليوم" 
                   value={`${dailyStats.totalRevenue} ج.م`} 
-                  subLabel="Gross revenue today"
+                  subLabel="Total income before deductions"
                   icon={<TrendingUp className="text-emerald-600" />}
                   color="emerald"
                 />
                 <StatCard 
+                  label="الصافي المتوقع" 
+                  value={`${dailyStats.totalRevenue - tithe - patients.reduce((acc, p) => acc + (settings.managementPrices[p.clinic][p.service] || 0), 0)} ج.م`} 
+                  subLabel="Net profit after all deductions"
+                  icon={<TrendingUp className="text-blue-600" />}
+                  color="blue"
+                />
+                <StatCard 
                   label="عدد المريضات" 
                   value={dailyStats.count.toString()} 
-                  subLabel="Patients count"
+                  subLabel="Total patients today"
                   icon={<Users className="text-indigo-600" />}
                   color="indigo"
                 />
@@ -812,10 +822,14 @@ function MobileNavButton({ active, onClick, icon, label }: { active: boolean; on
   );
 }
 
-function StatCard({ label, value, subLabel, icon, color }: { label: string; value: string; subLabel: string; icon: React.ReactNode; color: 'emerald' | 'indigo' }) {
-  const colorClass = color === 'emerald' ? 'border-b-emerald-500' : 'border-b-indigo-500';
+function StatCard({ label, value, subLabel, icon, color }: { label: string; value: string; subLabel: string; icon: React.ReactNode; color: 'emerald' | 'indigo' | 'blue' }) {
+  const colorClasses = {
+    emerald: 'border-b-emerald-500',
+    indigo: 'border-b-indigo-500',
+    blue: 'border-b-blue-500'
+  };
   return (
-    <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-b-4 ${colorClass} space-y-4 hover:shadow-md transition-shadow`}>
+    <div className={`bg-white p-6 rounded-2xl border border-slate-200 shadow-sm border-b-4 ${colorClasses[color]} space-y-4 hover:shadow-md transition-shadow`}>
       <div className="flex justify-between items-start">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
         <div className="p-2 rounded-lg bg-slate-50">
@@ -1101,28 +1115,44 @@ function HistoryView({
                       <SummaryItem label="عدد المريضات" value={selectedRecord.totalPatients.toString()} color="blue" />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">إيرادات العيادات</p>
-                        <div className="space-y-2">
-                          {Object.entries(CLINICS).map(([key, config]) => (
-                            <div key={key} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100">
-                              <span className="text-sm font-bold text-slate-600">{config.label}</span>
-                              <span className="font-black text-indigo-600">{selectedRecord.revenueByClinic?.[key as ClinicType] || 0} ج.م</span>
+                    <div className="space-y-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">مقارنة تفصيلية بين العيادات</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {Object.entries(CLINICS).map(([key, config]) => {
+                          const c = key as ClinicType;
+                          const gross = selectedRecord.revenueByClinic?.[c] || 0;
+                          const management = selectedRecord.managementByClinic?.[c] || 0;
+                          const net = gross - management;
+                          const patientsCount = selectedRecord.patientsByClinic?.[c] || 0;
+                          
+                          return (
+                            <div key={key} className="bg-slate-50 rounded-[2rem] border border-slate-100 overflow-hidden">
+                              <div className="p-4 border-b border-slate-100 flex items-center justify-between" style={{ backgroundColor: `${config.color}08` }}>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs" style={{ backgroundColor: `${config.color}15`, color: config.color }}>
+                                    {config.initial}
+                                  </div>
+                                  <span className="font-black text-slate-700">{config.label}</span>
+                                </div>
+                                <span className="px-2.5 py-1 bg-white rounded-lg text-[10px] font-black text-slate-400 border border-slate-100">{patientsCount} مريضة</span>
+                              </div>
+                              <div className="p-6 space-y-4">
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-500 font-bold">إجمالي الإيراد:</span>
+                                  <span className="font-black text-slate-900">{gross} ج.م</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-purple-600 font-bold">العاملة:</span>
+                                  <span className="font-black text-purple-700">-{management} ج.م</span>
+                                </div>
+                                <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
+                                  <span className="text-slate-900 font-black">الصافي (قبل العشور):</span>
+                                  <span className="text-lg font-black text-indigo-600">{net} ج.م</span>
+                                </div>
+                              </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">توزيع المريضات</p>
-                        <div className="space-y-2">
-                          {Object.entries(CLINICS).map(([key, config]) => (
-                            <div key={key} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100">
-                              <span className="text-sm font-bold text-slate-600">{config.label}</span>
-                              <span className="font-black text-emerald-600">{selectedRecord.patientsByClinic?.[key as ClinicType] || 0} مريضة</span>
-                            </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1262,23 +1292,69 @@ function HistoryView({
                 <h3 className="text-xl font-black text-[#0F172A] border-r-4 border-indigo-600 pr-5">مقارنة العيادات</h3>
                 {history.length > 0 && (() => {
                   const stats = history.reduce((acc, r) => {
-                    if (r.revenueByClinic) {
-                      acc.MINIA += r.revenueByClinic.MINIA || 0;
-                      acc.BENI_AHMED += r.revenueByClinic.BENI_AHMED || 0;
-                    }
+                    const miniaGross = r.revenueByClinic?.MINIA || 0;
+                    const beniGross = r.revenueByClinic?.BENI_AHMED || 0;
+                    const miniaManagement = r.managementByClinic?.MINIA || 0;
+                    const beniManagement = r.managementByClinic?.BENI_AHMED || 0;
+
+                    acc.MINIA += (miniaGross - miniaManagement);
+                    acc.BENI_AHMED += (beniGross - beniManagement);
                     return acc;
                   }, { MINIA: 0, BENI_AHMED: 0 });
                   const better = stats.MINIA > stats.BENI_AHMED ? 'عيادة المنيا' : 'عيادة بني أحمد';
                   const diff = Math.abs(stats.MINIA - stats.BENI_AHMED);
                   return (
                     <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs font-black text-indigo-700">
-                      الأفضل أداءً: {better} (بفرق {diff} ج.م)
+                      الأفضل أداءً (صافي): {better} (بفرق {diff} ج.م)
                     </div>
                   );
                 })()}
               </div>
               <div className="h-[360px]">
                 <ClinicComparisonChart history={history} />
+              </div>
+              <div className="mt-8 space-y-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">ملخص أداء العيادات التاريخي</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   {Object.entries(CLINICS).map(([key, config]) => {
+                    const c = key as ClinicType;
+                    const stats = history.reduce((acc, r) => {
+                      acc.gross += r.revenueByClinic?.[c] || 0;
+                      acc.management += r.managementByClinic?.[c] || 0;
+                      acc.patients += r.patientsByClinic?.[c] || 0;
+                      return acc;
+                    }, { gross: 0, management: 0, patients: 0 });
+                    
+                    return (
+                      <div key={key} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col justify-between">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs" style={{ backgroundColor: `${config.color}15`, color: config.color }}>
+                            {config.initial}
+                          </div>
+                          <span className="font-black text-slate-900">{config.label}</span>
+                        </div>
+                        <div className="space-y-2">
+                           <div className="flex justify-between text-xs text-slate-500 font-bold">
+                            <span>إجمالي الحالات:</span>
+                            <span>{stats.patients} مريضة</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-500 font-bold">
+                            <span>إجمالي الإيراد:</span>
+                            <span>{stats.gross} ج.م</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-purple-600 font-bold">
+                            <span>إجمالي العاملة:</span>
+                            <span>{stats.management} ج.م</span>
+                          </div>
+                          <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                            <span className="text-sm font-black text-slate-900">الصافي الكلي:</span>
+                            <span className="text-lg font-black text-indigo-600">{stats.gross - stats.management} ج.م</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

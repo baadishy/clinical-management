@@ -122,8 +122,14 @@ export function ClinicComparisonChart({ history }: { history: DailyRecord[] }) {
 
   history.forEach(record => {
     if (record.revenueByClinic) {
-      clinicStats.MINIA += record.revenueByClinic.MINIA || 0;
-      clinicStats.BENI_AHMED += record.revenueByClinic.BENI_AHMED || 0;
+      const miniaGross = record.revenueByClinic.MINIA || 0;
+      const beniGross = record.revenueByClinic.BENI_AHMED || 0;
+      
+      const miniaManagement = record.managementByClinic?.MINIA || 0;
+      const beniManagement = record.managementByClinic?.BENI_AHMED || 0;
+
+       clinicStats.MINIA += (miniaGross - miniaManagement);
+       clinicStats.BENI_AHMED += (beniGross - beniManagement);
     }
   });
 
@@ -144,7 +150,7 @@ export function ClinicComparisonChart({ history }: { history: DailyRecord[] }) {
       indexAxis: 'y' as const,
       plugins: { 
         legend: { display: false },
-        title: { display: true, text: 'مقارنة إجمالي الإيرادات حسب العيادة', font: { family: 'inherit', weight: 'bold' } }
+        title: { display: true, text: 'مقارنة صافي الربح حسب العيادة (قبل العشور)', font: { family: 'inherit', weight: 'bold' } }
       } 
     }} 
   />;

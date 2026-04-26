@@ -36,6 +36,7 @@ export interface DailyRecord {
   revenueByService: Record<ServiceType, number>;
   patientsByClinic: Record<ClinicType, number>;
   revenueByClinic: Record<ClinicType, number>;
+  managementByClinic?: Record<ClinicType, number>;
   allPatients?: PatientRecord[]; // Optional: full patient list for history
   totalGrossRevenue: number;
   tithe: number;
