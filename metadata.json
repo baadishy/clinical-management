@@ -1,6 +1,6 @@
 {
-  "name": "Clinic Management System - نظام إدارة العيادات",
-  "description": "A professional management system for clinic revenues, patient tracking, and financial analytics with tithe calculation support.",
+  "name": "نظام إدارة العيادات",
+  "description": "نظام احترافي دقيق لإدارة حسابات وإيرادات العيادات ومتابعة حالات المريضات والتحليلات المالية والربحية بالتفصيل مع دعم حساب زكاة العشور.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

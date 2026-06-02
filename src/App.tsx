@@ -161,7 +161,8 @@ export default function App() {
 
   const addBatchPatients = () => {
     const newPatients: PatientRecord[] = [];
-    Object.entries(serviceCounts).forEach(([service, count]) => {
+    Object.entries(serviceCounts).forEach(([service, rawCount]) => {
+      const count = rawCount as number;
       if (count > 0) {
         for (let i = 0; i < count; i++) {
           newPatients.push({
@@ -370,21 +371,21 @@ export default function App() {
                 <StatCard 
                   label="إجمالي إيرادات اليوم" 
                   value={`${dailyStats.totalRevenue} ج.م`} 
-                  subLabel="Total income before deductions"
+                  subLabel="الإيراد الكلي قبل الخصومات"
                   icon={<TrendingUp className="text-emerald-600" />}
                   color="emerald"
                 />
                 <StatCard 
-                  label="الصافي المتوقع" 
+                  label="الصافي لبركة الخمسين" 
                   value={`${dailyStats.totalRevenue - tithe - patients.reduce((acc, p) => acc + (settings.managementPrices[p.clinic][p.service] || 0), 0)} ج.م`} 
-                  subLabel="Net profit after all deductions"
+                  subLabel="الصافي الفعلي بعد العشور والعاملة"
                   icon={<TrendingUp className="text-blue-600" />}
                   color="blue"
                 />
                 <StatCard 
                   label="عدد المريضات" 
                   value={dailyStats.count.toString()} 
-                  subLabel="Total patients today"
+                  subLabel="إجمالي عدد الحالات اليوم"
                   icon={<Users className="text-indigo-600" />}
                   color="indigo"
                 />
@@ -450,7 +451,7 @@ export default function App() {
                     <div>
                       <div className="flex justify-between items-center mb-6">
                         <p className="text-xs font-black text-slate-400 uppercase tracking-widest">أدخل عدد المريضات لكل خدمة</p>
-                        {Object.values(serviceCounts).some(c => c > 0) && (
+                        {Object.values(serviceCounts).some(c => (c as number) > 0) && (
                           <button 
                             onClick={() => setServiceCounts({
                               CHECKUP: 0, FOLLOWUP: 0, IUD_INSERTION: 0, IUD_REMOVAL: 0, CAPSULE_REMOVAL: 0, PREGNANCY_TEST: 0
@@ -474,7 +475,7 @@ export default function App() {
                           >
                             <div className="flex-1">
                               <p className="text-sm font-black text-slate-700">{label}</p>
-                              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{settings.prices[selectedClinic][key as ServiceType]} EGP</p>
+                              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{settings.prices[selectedClinic][key as ServiceType]} ج.م</p>
                             </div>
                             
                             <div className="flex items-center gap-2">
@@ -510,7 +511,7 @@ export default function App() {
 
                       <button 
                         onClick={addBatchPatients}
-                        disabled={!Object.values(serviceCounts).some(c => c > 0)}
+                        disabled={!Object.values(serviceCounts).some(c => (c as number) > 0)}
                         className="w-full mt-8 py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:shadow-none flex items-center justify-center gap-3"
                       >
                         <PlusCircle size={24} />
@@ -988,7 +989,100 @@ function HistoryView({
   showToast: (message: string, type?: 'success' | 'error') => void;
 }) {
   const [selectedRecord, setSelectedRecord] = useState<DailyRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'months' | 'analytics'>('list');
+  const [selectedMonthStr, setSelectedMonthStr] = useState<string | null>(null);
+
+  const groupedMonths = useMemo(() => {
+    const groups: Record<string, {
+      monthStr: string;
+      records: DailyRecord[];
+      totalPatients: number;
+      totalGross: number;
+      totalTithe: number;
+      totalManagement: number;
+      totalNet: number;
+      clinics: Record<ClinicType, {
+        gross: number;
+        management: number;
+        net: number;
+        patients: number;
+      }>;
+      services: Record<ServiceType, {
+        count: number;
+        revenue: number;
+      }>;
+    }> = {};
+
+    history.forEach((record) => {
+      const monthStr = record.date.substring(0, 7); // YYYY-MM
+      if (!groups[monthStr]) {
+        groups[monthStr] = {
+          monthStr,
+          records: [],
+          totalPatients: 0,
+          totalGross: 0,
+          totalTithe: 0,
+          totalManagement: 0,
+          totalNet: 0,
+          clinics: {
+            MINIA: { gross: 0, management: 0, net: 0, patients: 0 },
+            BENI_AHMED: { gross: 0, management: 0, net: 0, patients: 0 }
+          },
+          services: {
+            CHECKUP: { count: 0, revenue: 0 },
+            FOLLOWUP: { count: 0, revenue: 0 },
+            IUD_INSERTION: { count: 0, revenue: 0 },
+            IUD_REMOVAL: { count: 0, revenue: 0 },
+            CAPSULE_REMOVAL: { count: 0, revenue: 0 },
+            PREGNANCY_TEST: { count: 0, revenue: 0 }
+          }
+        };
+      }
+
+      const g = groups[monthStr];
+      g.records.push(record);
+      g.totalPatients += record.totalPatients;
+      g.totalGross += record.totalGrossRevenue;
+      g.totalTithe += record.tithe;
+      g.totalManagement += record.management || 0;
+      g.totalNet += record.totalNetRevenue;
+
+      // Clinics
+      Object.keys(CLINICS).forEach((key) => {
+        const c = key as ClinicType;
+        const gross = record.revenueByClinic?.[c] || 0;
+        const management = record.managementByClinic?.[c] || 0;
+        const patCount = record.patientsByClinic?.[c] || 0;
+        
+        g.clinics[c].gross += gross;
+        g.clinics[c].management += management;
+        g.clinics[c].net += (gross - management);
+        g.clinics[c].patients += patCount;
+      });
+
+      // Services
+      Object.keys(SERVICES).forEach((key) => {
+        const s = key as ServiceType;
+        const count = record.patientsByService?.[s] || 0;
+        const revenue = record.revenueByService?.[s] || 0;
+        g.services[s].count += count;
+        g.services[s].revenue += revenue;
+      });
+    });
+
+    return Object.values(groups).sort((a, b) => b.monthStr.localeCompare(a.monthStr));
+  }, [history]);
+
+  useEffect(() => {
+    if (groupedMonths.length > 0 && !selectedMonthStr) {
+      setSelectedMonthStr(groupedMonths[0].monthStr);
+    }
+  }, [groupedMonths, selectedMonthStr]);
+
+  const selectedMonth = useMemo(() => {
+    if (!selectedMonthStr) return null;
+    return groupedMonths.find(m => m.monthStr === selectedMonthStr) || null;
+  }, [groupedMonths, selectedMonthStr]);
 
   const monthlyStats = useMemo(() => {
     if (history.length === 0) return null;
@@ -1030,13 +1124,19 @@ function HistoryView({
         <div className="flex bg-slate-100 p-1.5 rounded-2xl">
           <button 
             onClick={() => setActiveTab('list')}
-            className={`px-8 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'list' ? 'bg-white text-indigo-600 shadow-lg shadow-indigo-500/5' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'list' ? 'bg-white text-indigo-600 shadow-lg shadow-indigo-500/5' : 'text-slate-500 hover:text-slate-700'}`}
           >
             سجل الأيام
           </button>
           <button 
+            onClick={() => setActiveTab('months')}
+            className={`px-6 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'months' ? 'bg-white text-purple-600 shadow-lg shadow-purple-500/5' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            سجل الأشهر
+          </button>
+          <button 
             onClick={() => setActiveTab('analytics')}
-            className={`px-8 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'analytics' ? 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/5' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'analytics' ? 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/5' : 'text-slate-500 hover:text-slate-700'}`}
           >
             التحليلات والمقارنات
           </button>
@@ -1230,6 +1330,211 @@ function HistoryView({
                   <div className="text-center space-y-4">
                     <HistoryIcon size={64} className="mx-auto opacity-10" />
                     <p className="font-black italic text-lg opacity-40">اختاري يوماً من القائمة لاستعراض التفاصيل المالية</p>
+                  </div>
+                </div>
+               )}
+             </AnimatePresence>
+          </div>
+        </div>
+      ) : activeTab === 'months' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 text-right">
+          {/* Months List */}
+          <div className="lg:col-span-1 space-y-4 max-h-[700px] overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-slate-200">
+             {groupedMonths.map((m) => {
+                const isSelected = selectedMonthStr === m.monthStr;
+                const dateParts = m.monthStr.split('-');
+                const localMonthName = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+                return (
+                  <button
+                    key={m.monthStr}
+                    onClick={() => setSelectedMonthStr(m.monthStr)}
+                    className={`w-full p-6 border text-right rounded-3xl transition-all shadow-sm flex items-center justify-between group relative overflow-hidden ${
+                      isSelected 
+                        ? 'bg-white border-purple-600 ring-4 ring-purple-500/5 shadow-xl shadow-purple-500/5' 
+                        : 'bg-white border-slate-100 hover:border-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <p className="text-base font-black text-slate-900">{localMonthName}</p>
+                      <div className="flex gap-2">
+                         <span className="text-[10px] bg-slate-50 px-2.5 py-1 rounded-lg text-slate-500 font-black">{m.totalPatients} مريضة</span>
+                         <span className="text-[10px] bg-purple-50 px-2.5 py-1 rounded-lg text-purple-600 font-black">الصافي: {m.totalNet} ج.م</span>
+                      </div>
+                    </div>
+                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-purple-600 text-white rotate-6' : 'bg-slate-50 text-slate-300'}`}>
+                      <Calendar size={22} />
+                    </div>
+                  </button>
+                );
+             })}
+          </div>
+
+          <div className="lg:col-span-2">
+             <AnimatePresence mode="wait">
+               {selectedMonth ? (
+                <motion.div 
+                  key={selectedMonth.monthStr}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="bg-white border border-slate-100 rounded-[2.5rem] p-5 md:p-10 shadow-sm space-y-8 md:space-y-10 text-right"
+                >
+                     {/* Month Report Header */}
+                     <div className="border-b border-slate-100 pb-6 md:pb-8">
+                        <h3 className="text-2xl md:text-3xl font-black text-[#0F172A]">
+                          تقرير أداء {(() => {
+                            const [year, month] = selectedMonth.monthStr.split('-');
+                            return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+                          })()}
+                        </h3>
+                        <p className="text-slate-400 font-bold text-[10px] md:text-sm mt-1 uppercase tracking-widest flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-purple-500" />
+                          ملخص ومقارنة المعاملات الشهرية التفصيلية
+                        </p>
+                     </div>
+
+                     {/* Main Month KPI Cards */}
+                     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
+                       <SummaryItem label="إجمالي الإيرادات" value={`${selectedMonth.totalGross} ج.م`} color="slate" />
+                       <SummaryItem label="إجمالي العشور" value={`${selectedMonth.totalTithe} ج.م`} color="red" />
+                       <SummaryItem label="إجمالي العاملة" value={`${selectedMonth.totalManagement} ج.م`} color="purple" />
+                       <div className="p-6 rounded-[1.5rem] border bg-emerald-50 text-emerald-800 border-emerald-100 ring-4 ring-emerald-500/10 space-y-2 col-span-2 lg:col-span-1 shadow-sm">
+                         <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">الصافي النهائي بعد الخصم</p>
+                         <p className="text-xl md:text-2xl font-black">{selectedMonth.totalNet} ج.م</p>
+                       </div>
+                       <SummaryItem label="إجمالي الحالات" value={`${selectedMonth.totalPatients} مريضة`} color="blue" />
+                     </div>
+
+                     {/* Clinics Performance in details - Before and After Worker / العاملة */}
+                     <div className="space-y-4">
+                       <h4 className="font-black text-sm text-slate-400 uppercase tracking-widest px-2 flex items-center gap-3">
+                         <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full" />
+                         مقارنة أداء العيادات (قبل وبعد العاملة وصافي المساهمة)
+                       </h4>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         {Object.entries(CLINICS).map(([key, config]) => {
+                           const c = key as ClinicType;
+                           const clinData = selectedMonth.clinics[c];
+                           
+                           const totalClinicsNet = selectedMonth.clinics.MINIA.net + selectedMonth.clinics.BENI_AHMED.net;
+                           const contributionPercent = totalClinicsNet > 0 ? (clinData.net / totalClinicsNet) * 100 : 0;
+
+                           return (
+                             <div key={key} className="bg-slate-50 rounded-[2.5rem] border border-slate-100 overflow-hidden hover:border-slate-200 transition-all">
+                               <div className="p-5 border-b border-slate-100 flex items-center justify-between" style={{ backgroundColor: `${config.color}05` }}>
+                                 <div className="flex items-center gap-3">
+                                   <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs" style={{ backgroundColor: `${config.color}15`, color: config.color }}>
+                                     {config.initial}
+                                   </div>
+                                   <span className="font-black text-slate-900 text-base">{config.label}</span>
+                                 </div>
+                                 <span className="px-3 py-1 bg-white rounded-xl text-xs font-black text-slate-500 border border-slate-100">{clinData.patients} مريضة</span>
+                               </div>
+                               
+                               <div className="p-6 space-y-4">
+                                 <div className="flex justify-between items-center text-sm">
+                                   <span className="text-slate-500 font-bold">إجمالي الإيرادات (قبل العاملة):</span>
+                                   <span className="font-black text-slate-800">{clinData.gross} ج.م</span>
+                                 </div>
+                                 <div className="flex justify-between items-center text-sm">
+                                   <span className="text-purple-600 font-bold">قيمة العاملة المستقطعة:</span>
+                                   <span className="font-black text-purple-700">-{clinData.management} ج.م</span>
+                                 </div>
+                                 <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
+                                   <span className="text-slate-900 font-black">الصافي (بعد العاملة وقبل العشور):</span>
+                                   <span className="text-lg font-black text-indigo-600">{clinData.net} ج.م</span>
+                                 </div>
+                                 
+                                 <div className="pt-2">
+                                   <div className="flex justify-between text-[10px] text-slate-400 font-black mb-1">
+                                     <span>مساهمة العيادة في الربح الكلي:</span>
+                                     <span>{contributionPercent.toFixed(0)}%</span>
+                                   </div>
+                                   <div className="w-full h-2 bg-slate-200/60 rounded-full overflow-hidden">
+                                     <div 
+                                       className="h-full rounded-full transition-all duration-500"
+                                       style={{ width: `${contributionPercent}%`, backgroundColor: config.color }}
+                                     />
+                                   </div>
+                                 </div>
+                               </div>
+                             </div>
+                           );
+                         })}
+                       </div>
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                       <div className="space-y-6">
+                         <h4 className="font-black text-sm text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                           <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+                           توزيع الخدمات في هذا الشهر
+                         </h4>
+                         <div className="space-y-3">
+                           {Object.entries(SERVICES).map(([key, label]) => {
+                             const sType = key as ServiceType;
+                             const sData = selectedMonth.services[sType];
+                             if (sData.count === 0) return null;
+                             
+                             const percent = selectedMonth.totalGross > 0 ? (sData.revenue / selectedMonth.totalGross) * 100 : 0;
+
+                             return (
+                               <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-slate-200 hover:bg-slate-100/50 transition-all space-y-2">
+                                 <div className="flex justify-between items-center">
+                                   <div>
+                                     <p className="text-sm font-black text-slate-800">{label}</p>
+                                     <p className="text-[10px] text-slate-400 font-bold">{sData.count} حالات مسجلة</p>
+                                   </div>
+                                   <div className="text-left">
+                                     <span className="text-base font-black text-emerald-600">{sData.revenue} ج.م</span>
+                                     <p className="text-[9px] text-slate-400 font-bold">{percent.toFixed(0)}% من الدخل</p>
+                                   </div>
+                                 </div>
+                               </div>
+                             );
+                           })}
+                         </div>
+                       </div>
+
+                       <div className="space-y-6">
+                         <h4 className="font-black text-[11px] text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                           <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                           تقرير أيام الشهر المنقضية ({selectedMonth.records.length} يوم)
+                         </h4>
+                         <div className="bg-slate-50 rounded-[2rem] border border-slate-100 overflow-hidden max-h-[360px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+                           <table className="w-full text-right text-xs">
+                             <thead className="bg-slate-100 text-slate-500 font-black sticky top-0 z-10 text-[9px] uppercase tracking-widest">
+                               <tr>
+                                 <th className="px-4 py-3 border-b border-slate-200 pr-5">اليوم</th>
+                                 <th className="px-4 py-3 border-b border-slate-200 text-center">المريضات</th>
+                                 <th className="px-4 py-3 border-b border-slate-200 text-center">العاملة</th>
+                                 <th className="px-4 py-3 border-b border-slate-200 text-center">العشور</th>
+                                 <th className="px-4 py-3 border-b border-slate-200 text-left pl-5">الصافي النهائي</th>
+                               </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-100 bg-white">
+                               {selectedMonth.records.sort((a,b) => b.date.localeCompare(a.date)).map((r) => (
+                                 <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                                   <td className="px-4 py-3 font-bold text-slate-700 pr-5">
+                                      {new Date(r.date).toLocaleDateString('ar-EG', { weekday: 'short', day: 'numeric', month: 'numeric' })}
+                                   </td>
+                                   <td className="px-4 py-3 text-center text-slate-600 font-medium">{r.totalPatients}</td>
+                                   <td className="px-4 py-3 text-center text-purple-600 font-bold">{r.management || 0}</td>
+                                   <td className="px-4 py-3 text-center text-orange-600 font-bold">{r.tithe}</td>
+                                   <td className="px-4 py-3 text-left font-black text-emerald-600 pl-5">{r.totalNetRevenue} ج.م</td>
+                                 </tr>
+                               ))}
+                             </tbody>
+                           </table>
+                         </div>
+                       </div>
+                     </div>
+                </motion.div>
+               ) : (
+                <div className="h-[500px] flex items-center justify-center border-2 border-dashed border-slate-100 rounded-[2.5rem] p-12 text-slate-300 bg-slate-50/30">
+                  <div className="text-center space-y-4">
+                    <HistoryIcon size={64} className="mx-auto opacity-10" />
+                    <p className="font-black italic text-lg opacity-40">لا يوجد أداء شهري مسجل بعد</p>
                   </div>
                 </div>
                )}
